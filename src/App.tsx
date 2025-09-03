@@ -1,85 +1,76 @@
 import React, { useState } from 'react';
-import { AuthProvider } from './components/AuthProvider';
-import SimpleDatabaseCheck from './components/SimpleDatabaseCheck';
 import ErrorBoundary from './components/ErrorBoundary';
 import LandingPage from './components/LandingPage';
 import Login from './components/auth/Login';
 import Dashboard from './components/individual/Dashboard';
-import HospitalPortal from './components/hospital/HospitalPortal';
-import AdminPortal from './components/admin/AdminPortal';
-import HospitalApplication from './components/HospitalApplication';
-
-type Page = 
-  | 'landing' 
-  | 'login' 
-  | 'hospital-login'
-  | 'admin-login'
-  | 'dashboard' 
-  | 'hospital' 
-  | 'admin'
-  | 'hospital-application';
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('landing');
-  const [bypassDatabaseCheck, setBypassDatabaseCheck] = useState(false);
+  const [currentPage, setCurrentPage] = useState<'landing' | 'login' | 'dashboard' | 'test'>('landing');
 
-  const navigate = (page: Page) => {
+  console.log('App rendering, currentPage:', currentPage);
+
+  const navigate = (page: 'landing' | 'login' | 'dashboard' | 'test') => {
+    console.log('Navigating to:', page);
     setCurrentPage(page);
   };
 
-  // Add keyboard shortcut to bypass database check (for development)
-  React.useEffect(() => {
-    const handleKeyPress = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.shiftKey && event.key === 'D') {
-        console.log('Database check bypassed via keyboard shortcut');
-        setBypassDatabaseCheck(true);
-      }
-    };
+  if (currentPage === 'landing') {
+    return (
+      <ErrorBoundary>
+        <LandingPage navigate={navigate} />
+      </ErrorBoundary>
+    );
+  }
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, []);
+  if (currentPage === 'login') {
+    return (
+      <ErrorBoundary>
+        <Login navigate={navigate} role="individual" />
+      </ErrorBoundary>
+    );
+  }
 
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'landing':
-        return <LandingPage navigate={navigate} />;
-      case 'login':
-        return <Login navigate={navigate} role="individual" />;
-      case 'hospital-login':
-        return <Login navigate={navigate} role="hospital_admin" />;
-      case 'admin-login':
-        return <Login navigate={navigate} role="platform_admin" />;
-      case 'dashboard':
-        return <Dashboard navigate={navigate} />;
-      case 'hospital':
-        return <HospitalPortal navigate={navigate} />;
-      case 'admin':
-        return <AdminPortal navigate={navigate} />;
-      case 'hospital-application':
-        return <HospitalApplication navigate={navigate} />;
-      default:
-        return <LandingPage navigate={navigate} />;
-    }
-  };
+  if (currentPage === 'dashboard') {
+    return (
+      <ErrorBoundary>
+        <Dashboard navigate={navigate} />
+      </ErrorBoundary>
+    );
+  }
 
-  const renderApp = () => (
-    <AuthProvider>
-      <div className="min-h-screen bg-gray-50">
-        {renderPage()}
-      </div>
-    </AuthProvider>
-  );
-
+  // Test page
   return (
     <ErrorBoundary>
-      {bypassDatabaseCheck ? (
-        renderApp()
-      ) : (
-        <SimpleDatabaseCheck onBypass={() => setBypassDatabaseCheck(true)}>
-          {renderApp()}
-        </SimpleDatabaseCheck>
-      )}
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            LifeLink Test Page
+          </h1>
+          <p className="text-gray-600 mb-4">
+            Test navigation between components
+          </p>
+          <div className="space-y-2">
+            <button
+              onClick={() => navigate('landing')}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 block w-full"
+            >
+              Go to Landing Page
+            </button>
+            <button
+              onClick={() => navigate('login')}
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 block w-full"
+            >
+              Go to Login Page
+            </button>
+            <button
+              onClick={() => navigate('dashboard')}
+              className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 block w-full"
+            >
+              Go to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
     </ErrorBoundary>
   );
 }

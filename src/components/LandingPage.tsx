@@ -21,17 +21,17 @@ export default function LandingPage({ navigate }: LandingPageProps) {
             <div className="flex items-center space-x-4">
               <Button
                 variant="ghost"
-                onClick={() => navigate('hospital-application')}
+                onClick={() => navigate('login')}
                 className="text-gray-600 hover:text-gray-900"
               >
-                Register Hospital
+                Login
               </Button>
               <Button
                 variant="ghost"
-                onClick={() => navigate('admin-login')}
+                onClick={() => navigate('test')}
                 className="text-sm text-gray-500 hover:text-gray-700"
               >
-                Admin
+                Test Page
               </Button>
             </div>
           </div>
@@ -66,7 +66,7 @@ export default function LandingPage({ navigate }: LandingPageProps) {
                 size="lg"
                 variant="outline"
                 className="border-red-600 text-red-600 hover:bg-red-50 px-8 py-3 text-lg"
-                onClick={() => navigate('hospital-login')}
+                onClick={() => navigate('login')}
               >
                 <Hospital className="mr-2 h-5 w-5" />
                 For Hospitals
@@ -191,8 +191,8 @@ export default function LandingPage({ navigate }: LandingPageProps) {
               <h3 className="font-bold mb-4">Quick Links</h3>
               <ul className="space-y-2 text-gray-300">
                 <li><button onClick={() => navigate('login')} className="hover:text-white">Individual Login</button></li>
-                <li><button onClick={() => navigate('hospital-login')} className="hover:text-white">Hospital Login</button></li>
-                <li><button onClick={() => navigate('hospital-application')} className="hover:text-white">Register Hospital</button></li>
+                <li><button onClick={() => navigate('login')} className="hover:text-white">Hospital Login</button></li>
+                <li><button onClick={() => navigate('test')} className="hover:text-white">Register Hospital</button></li>
               </ul>
             </div>
             
@@ -202,7 +202,7 @@ export default function LandingPage({ navigate }: LandingPageProps) {
                 <li><span className="hover:text-white cursor-pointer">Help Center</span></li>
                 <li><span className="hover:text-white cursor-pointer">Privacy Policy</span></li>
                 <li><span className="hover:text-white cursor-pointer">Terms of Service</span></li>
-                <li><button onClick={() => navigate('admin-login')} className="hover:text-white text-sm">Admin Portal</button></li>
+                <li><button onClick={() => navigate('test')} className="hover:text-white text-sm">Admin Portal</button></li>
               </ul>
             </div>
           </div>

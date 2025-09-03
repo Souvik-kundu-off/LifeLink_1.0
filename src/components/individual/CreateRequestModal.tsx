@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, MapPin, AlertTriangle, Save } from 'lucide-react';
+import { X, Heart, MapPin, User, Calendar, AlertTriangle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
-import { useAuth } from '../AuthProvider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { useUser } from '../../hooks/useUser';
 import { supabase, Database } from '../../utils/supabase/client';
 
 interface CreateRequestModalProps {
@@ -16,22 +16,10 @@ interface CreateRequestModalProps {
   onSuccess: () => void;
 }
 
-interface Hospital extends Database['public']['Tables']['hospitals']['Row'] {}
+type Hospital = Database['public']['Tables']['hospitals']['Row'];
 
-const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-const urgencyLevels = [
-  { value: 'Critical', label: 'Critical - Immediate need' },
-  { value: 'High', label: 'High - Within 24 hours' },
-  { value: 'Medium', label: 'Medium - Within 3 days' },
-  { value: 'Low', label: 'Low - Within a week' }
-];
-
-export default function CreateRequestModal({ 
-  isOpen, 
-  onClose, 
-  onSuccess 
-}: CreateRequestModalProps) {
-  const { user } = useAuth();
+export default function CreateRequestModal({ isOpen, onClose, onSuccess }: CreateRequestModalProps) {
+  const { user } = useUser();
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [formData, setFormData] = useState({
     patient_name: '',
@@ -52,7 +40,6 @@ export default function CreateRequestModal({
   }, [isOpen]);
 
   const fetchHospitals = async () => {
-    setLoadingHospitals(true);
     try {
       const { data, error } = await supabase
         .from('hospitals')
@@ -62,14 +49,12 @@ export default function CreateRequestModal({
 
       if (error) {
         console.error('Error fetching hospitals:', error);
-        setError('Failed to load hospitals. Please try again.');
         return;
       }
 
       setHospitals(data || []);
-    } catch (err) {
-      console.error('Error fetching hospitals:', err);
-      setError('Failed to load hospitals. Please try again.');
+    } catch (error) {
+      console.error('Error fetching hospitals:', error);
     } finally {
       setLoadingHospitals(false);
     }
@@ -84,12 +69,6 @@ export default function CreateRequestModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!user) {
-      setError('You must be logged in to create a request');
-      return;
-    }
-
     setIsLoading(true);
     setError('');
 
@@ -101,7 +80,14 @@ export default function CreateRequestModal({
         return;
       }
 
-      if (!formData.patient_age || parseInt(formData.patient_age) < 0 || parseInt(formData.patient_age) > 150) {
+      if (!formData.patient_age.trim()) {
+        setError('Patient age is required');
+        setIsLoading(false);
+        return;
+      }
+
+      const age = parseInt(formData.patient_age);
+      if (isNaN(age) || age < 0 || age > 150) {
         setError('Please enter a valid patient age');
         setIsLoading(false);
         return;
@@ -120,36 +106,35 @@ export default function CreateRequestModal({
       }
 
       if (!formData.hospital_id) {
-        setError('Hospital selection is required');
+        setError('Hospital is required');
         setIsLoading(false);
         return;
       }
 
-      // Create the blood request
-      const { data, error } = await supabase
+      // Submit blood request
+      const { error } = await supabase
         .from('blood_requests')
         .insert([
           {
-            requester_id: user.id,
+            requester_id: user?.id,
             patient_name: formData.patient_name.trim(),
-            patient_age: parseInt(formData.patient_age),
-            blood_group_needed: formData.blood_group_needed as any,
-            urgency: formData.urgency as any,
+            patient_age: age,
+            blood_group_needed: formData.blood_group_needed,
+            urgency: formData.urgency,
             hospital_id: formData.hospital_id,
-            status: 'pending_verification'
+            status: 'pending_verification',
+            additional_notes: formData.additional_notes.trim() || null
           }
-        ])
-        .select()
-        .single();
+        ]);
 
       if (error) {
         console.error('Error creating request:', error);
-        setError('Failed to create request. Please try again.');
+        setError(error.message || 'Failed to create request. Please try again.');
         setIsLoading(false);
         return;
       }
 
-      // Reset form
+      // Reset form and close modal
       setFormData({
         patient_name: '',
         patient_age: '',
@@ -158,199 +143,212 @@ export default function CreateRequestModal({
         hospital_id: '',
         additional_notes: ''
       });
-
+      setError('');
       onSuccess();
     } catch (err: any) {
       console.error('Error creating request:', err);
-      setError(err.message || 'An unexpected error occurred');
+      setError('An unexpected error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const selectedHospital = hospitals.find(h => h.id === formData.hospital_id);
+  if (!isOpen) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center">
-            <FileText className="h-5 w-5 mr-2" />
-            Create Blood Donation Request
-          </DialogTitle>
-          <DialogDescription>
-            Create a new request for blood donation. Hospital staff will review and verify your request.
-          </DialogDescription>
-        </DialogHeader>
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Patient Information */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900">Patient Information</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="patient_name">Patient Name *</Label>
-                <Input
-                  id="patient_name"
-                  value={formData.patient_name}
-                  onChange={(e) => handleInputChange('patient_name', e.target.value)}
-                  placeholder="Enter patient's full name"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="patient_age">Patient Age *</Label>
-                <Input
-                  id="patient_age"
-                  type="number"
-                  min="0"
-                  max="150"
-                  value={formData.patient_age}
-                  onChange={(e) => handleInputChange('patient_age', e.target.value)}
-                  placeholder="Enter patient's age"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="blood_group_needed">Blood Group Needed *</Label>
-                <Select
-                  value={formData.blood_group_needed}
-                  onValueChange={(value) => handleInputChange('blood_group_needed', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select blood group" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bloodGroups.map((group) => (
-                      <SelectItem key={group} value={group}>
-                        {group}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="urgency">Urgency Level *</Label>
-                <Select
-                  value={formData.urgency}
-                  onValueChange={(value) => handleInputChange('urgency', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select urgency" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {urgencyLevels.map((level) => (
-                      <SelectItem key={level.value} value={level.value}>
-                        {level.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <CardHeader className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center">
+              <Heart className="h-5 w-5 mr-2 text-red-600" />
+              Create Blood Request
+            </CardTitle>
+            <CardDescription>
+              Submit a new blood donation request for a patient in need
+            </CardDescription>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="h-8 w-8 p-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </CardHeader>
 
-          {/* Hospital Selection */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900">Hospital Information</h3>
-            
-            <div className="space-y-2">
-              <Label htmlFor="hospital_id">Select Hospital *</Label>
-              {loadingHospitals ? (
-                <div className="flex items-center justify-center p-4">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600"></div>
-                  <span className="ml-2 text-gray-600">Loading hospitals...</span>
-                </div>
-              ) : (
-                <Select
-                  value={formData.hospital_id}
-                  onValueChange={(value) => handleInputChange('hospital_id', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select hospital" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {hospitals.map((hospital) => (
-                      <SelectItem key={hospital.id} value={hospital.id}>
-                        {hospital.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+        <CardContent>
+          {error && (
+            <Alert className="mb-6" variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Patient Information */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-gray-900 flex items-center">
+                <User className="h-4 w-4 mr-2" />
+                Patient Information
+              </h3>
               
-              {selectedHospital && (
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-start">
-                    <MapPin className="h-4 w-4 text-gray-500 mt-1 mr-2" />
-                    <div className="text-sm">
-                      <p className="font-medium">{selectedHospital.name}</p>
-                      <p className="text-gray-600">{selectedHospital.address}</p>
-                      <p className="text-gray-600">Contact: {selectedHospital.contact_info}</p>
-                    </div>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="patient_name">Patient Name *</Label>
+                  <Input
+                    id="patient_name"
+                    value={formData.patient_name}
+                    onChange={(e) => handleInputChange('patient_name', e.target.value)}
+                    placeholder="Enter patient's full name"
+                    required
+                  />
                 </div>
-              )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="patient_age">Patient Age *</Label>
+                  <Input
+                    id="patient_age"
+                    type="number"
+                    value={formData.patient_age}
+                    onChange={(e) => handleInputChange('patient_age', e.target.value)}
+                    placeholder="Age in years"
+                    min="0"
+                    max="150"
+                    required
+                  />
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Additional Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="additional_notes">Additional Notes (Optional)</Label>
-            <Textarea
-              id="additional_notes"
-              value={formData.additional_notes}
-              onChange={(e) => handleInputChange('additional_notes', e.target.value)}
-              placeholder="Any additional information about the patient or request..."
-              rows={3}
-            />
-          </div>
+            {/* Blood Requirements */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-gray-900 flex items-center">
+                <Heart className="h-4 w-4 mr-2" />
+                Blood Requirements
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="blood_group_needed">Blood Group Needed *</Label>
+                  <Select
+                    value={formData.blood_group_needed}
+                    onValueChange={(value) => handleInputChange('blood_group_needed', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select blood group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="A+">A+</SelectItem>
+                      <SelectItem value="A-">A-</SelectItem>
+                      <SelectItem value="B+">B+</SelectItem>
+                      <SelectItem value="B-">B-</SelectItem>
+                      <SelectItem value="AB+">AB+</SelectItem>
+                      <SelectItem value="AB-">AB-</SelectItem>
+                      <SelectItem value="O+">O+</SelectItem>
+                      <SelectItem value="O-">O-</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              Your request will be sent to the selected hospital for verification. 
-              Once approved, it will be visible to potential donors in the community.
-            </AlertDescription>
-          </Alert>
+                <div className="space-y-2">
+                  <Label htmlFor="urgency">Urgency Level *</Label>
+                  <Select
+                    value={formData.urgency}
+                    onValueChange={(value) => handleInputChange('urgency', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select urgency level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Critical">Critical (Immediate)</SelectItem>
+                      <SelectItem value="High">High (Within 24 hours)</SelectItem>
+                      <SelectItem value="Medium">Medium (Within 3 days)</SelectItem>
+                      <SelectItem value="Low">Low (Within a week)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
 
-          <div className="flex justify-end space-x-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button 
-              type="submit" 
-              disabled={isLoading || loadingHospitals}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {isLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Creating Request...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Create Request
-                </>
-              )}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+            {/* Hospital Selection */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-gray-900 flex items-center">
+                <MapPin className="h-4 w-4 mr-2" />
+                Hospital Selection
+              </h3>
+              
+              <div className="space-y-2">
+                <Label htmlFor="hospital_id">Select Hospital *</Label>
+                {loadingHospitals ? (
+                  <div className="flex items-center space-x-2 text-sm text-gray-500">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    Loading hospitals...
+                  </div>
+                ) : (
+                  <Select
+                    value={formData.hospital_id}
+                    onValueChange={(value) => handleInputChange('hospital_id', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a hospital" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hospitals.map((hospital) => (
+                        <SelectItem key={hospital.id} value={hospital.id}>
+                          {hospital.name} - {hospital.address}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </div>
+
+            {/* Additional Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="additional_notes">Additional Notes (Optional)</Label>
+              <Textarea
+                id="additional_notes"
+                value={formData.additional_notes}
+                onChange={(e) => handleInputChange('additional_notes', e.target.value)}
+                placeholder="Any additional information about the patient's condition, special requirements, or notes for donors..."
+                rows={4}
+              />
+            </div>
+
+            {/* Form Actions */}
+            <div className="flex items-center justify-end space-x-3 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Creating Request...
+                  </>
+                ) : (
+                  <>
+                    <Heart className="h-4 w-4 mr-2" />
+                    Create Request
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

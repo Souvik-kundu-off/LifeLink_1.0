@@ -1,10 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Database } from '../utils/supabase/client';
-import { createUserProfile, safeQuery } from '../utils/databaseSetup';
-import { hasRole, hasAnyRole, canAccessHospital, canManageBloodRequests } from '../utils/authorization';
 
-interface Profile extends Database['public']['Tables']['profiles']['Row'] {}
+type Profile = Database['public']['Tables']['profiles']['Row'];
 
 interface AuthContextType {
   user: User | null;
@@ -62,19 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function fetchProfile(userId: string) {
     try {
-      const { data, error, isSetupError } = await safeQuery('profiles', () =>
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single()
-      );
-
-      if (isSetupError) {
-        console.error('Database setup error when fetching profile:', error);
-        setLoading(false);
-        return;
-      }
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
       if (error) {
         console.error('Error fetching profile:', error);
@@ -121,16 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function updateProfile(updates: Partial<Profile>) {
     if (!user) return;
 
-    const { data, error, isSetupError } = await safeQuery('profiles', () =>
-      supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', user.id)
-    );
-
-    if (isSetupError) {
-      throw new Error('Database tables are not set up. Please run the database setup script first.');
-    }
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', user.id);
 
     if (error) {
       console.error('Error updating profile:', error);
@@ -175,4 +159,41 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+}
+
+// Authorization helper functions
+function hasRole(authContext: { user: User | null; profile: Profile | null }, role: 'individual' | 'hospital_admin' | 'platform_admin'): boolean {
+  return authContext.profile?.role === role;
+}
+
+function hasAnyRole(authContext: { user: User | null; profile: Profile | null }, roles: ('individual' | 'hospital_admin' | 'platform_admin')[]): boolean {
+  return authContext.profile ? roles.includes(authContext.profile.role) : false;
+}
+
+function canAccessHospital(authContext: { user: User | null; profile: Profile | null }, hospitalId: string): boolean {
+  if (!authContext.profile) return false;
+  
+  // Platform admins can access all hospitals
+  if (authContext.profile.role === 'platform_admin') return true;
+  
+  // Hospital admins can only access their own hospital
+  if (authContext.profile.role === 'hospital_admin') {
+    return authContext.profile.hospital_id === hospitalId;
+  }
+  
+  return false;
+}
+
+function canManageBloodRequests(authContext: { user: User | null; profile: Profile | null }, hospitalId?: string): boolean {
+  if (!authContext.profile) return false;
+  
+  // Platform admins can manage all requests
+  if (authContext.profile.role === 'platform_admin') return true;
+  
+  // Hospital admins can only manage requests for their hospital
+  if (authContext.profile.role === 'hospital_admin') {
+    return hospitalId ? authContext.profile.hospital_id === hospitalId : true;
+  }
+  
+  return false;
 }

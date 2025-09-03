@@ -17,7 +17,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Avatar, AvatarFallback } from '../ui/avatar';
-import { useAuth } from '../AuthProvider';
+import { useUser } from '../../hooks/useUser';
 import { supabase, Database } from '../../utils/supabase/client';
 
 interface HospitalPortalProps {
@@ -32,7 +32,7 @@ interface HospitalStats {
 }
 
 export default function HospitalPortal({ navigate }: HospitalPortalProps) {
-  const { user, profile, signOut, loading } = useAuth();
+  const { user, profile, loading, hasRole } = useUser();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [hospitalStats, setHospitalStats] = useState<HospitalStats>({
     totalDonors: 0,
@@ -42,11 +42,18 @@ export default function HospitalPortal({ navigate }: HospitalPortalProps) {
   });
   const [loadingStats, setLoadingStats] = useState(true);
 
+  // Security check - redirect if not hospital admin
   useEffect(() => {
-    if (user && profile && profile.hospital_id) {
+    if (!loading && (!user || !profile || !hasRole('hospital_admin'))) {
+      navigate('landing');
+    }
+  }, [loading, user, profile, hasRole, navigate]);
+
+  useEffect(() => {
+    if (user && profile && hasRole('hospital_admin') && profile.hospital_id) {
       fetchHospitalStats();
     }
-  }, [user, profile]);
+  }, [user, profile, hasRole]);
 
   const fetchHospitalStats = async () => {
     if (!profile?.hospital_id) return;
@@ -90,13 +97,14 @@ export default function HospitalPortal({ navigate }: HospitalPortalProps) {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
+      await supabase.auth.signOut();
       navigate('landing');
     } catch (error) {
       console.error('Error signing out:', error);
     }
   };
 
+  // Show loading state
   if (loading || loadingStats) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -108,8 +116,8 @@ export default function HospitalPortal({ navigate }: HospitalPortalProps) {
     );
   }
 
-  if (!user || !profile || profile.role !== 'hospital_admin') {
-    navigate('hospital-login');
+  // Security check - don't render if not hospital admin
+  if (!user || !profile || !hasRole('hospital_admin')) {
     return null;
   }
 

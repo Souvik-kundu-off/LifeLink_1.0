@@ -7,7 +7,6 @@ import { Textarea } from './ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
 import { supabase } from '../utils/supabase/client';
-import { safeQuery } from '../utils/databaseSetup';
 
 interface HospitalApplicationProps {
   navigate: (page: string) => void;
@@ -70,30 +69,22 @@ export default function HospitalApplication({ navigate }: HospitalApplicationPro
         return;
       }
 
-      // Submit hospital application using safe query
-      const { data, error, isSetupError } = await safeQuery('hospitals', () =>
-        supabase
-          .from('hospitals')
-          .insert([
-            {
-              name: formData.name.trim(),
-              address: formData.address.trim(),
-              contact_person_name: formData.contact_person_name.trim(),
-              contact_info: formData.contact_info.trim(),
-              license_number: formData.license_number.trim(),
-              application_date: new Date().toISOString().split('T')[0],
-              status: 'pending_review'
-            }
-          ])
-          .select()
-          .single()
-      );
-
-      if (isSetupError) {
-        setError('Database is not set up properly. Please contact the administrator.');
-        setIsLoading(false);
-        return;
-      }
+      // Submit hospital application directly using Supabase
+      const { data, error } = await supabase
+        .from('hospitals')
+        .insert([
+          {
+            name: formData.name.trim(),
+            address: formData.address.trim(),
+            contact_person_name: formData.contact_person_name.trim(),
+            contact_info: formData.contact_info.trim(),
+            license_number: formData.license_number.trim(),
+            application_date: new Date().toISOString().split('T')[0],
+            status: 'pending_review'
+          }
+        ])
+        .select()
+        .single();
 
       if (error) {
         console.error('Error submitting application:', error);

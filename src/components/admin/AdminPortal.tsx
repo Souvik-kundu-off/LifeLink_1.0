@@ -19,7 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Input } from '../ui/input';
-import { useAuth } from '../AuthProvider';
+import { useUser } from '../../hooks/useUser';
 import { supabase, Database } from '../../utils/supabase/client';
 import { formatDistanceToNow } from '../../utils/dateUtils';
 
@@ -35,10 +35,10 @@ interface PlatformStats {
   activeRequests: number;
 }
 
-interface PendingHospital extends Database['public']['Tables']['hospitals']['Row'] {}
+type PendingHospital = Database['public']['Tables']['hospitals']['Row'];
 
 export default function AdminPortal({ navigate }: AdminPortalProps) {
-  const { user, profile, signOut, loading } = useAuth();
+  const { user, profile, loading, hasRole } = useUser();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [platformStats, setPlatformStats] = useState<PlatformStats>({
     totalUsers: 0,
@@ -51,12 +51,19 @@ export default function AdminPortal({ navigate }: AdminPortalProps) {
   const [loadingStats, setLoadingStats] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Security check - redirect if not platform admin
   useEffect(() => {
-    if (user && profile && profile.role === 'platform_admin') {
+    if (!loading && (!user || !profile || !hasRole('platform_admin'))) {
+      navigate('landing');
+    }
+  }, [loading, user, profile, hasRole, navigate]);
+
+  useEffect(() => {
+    if (user && profile && hasRole('platform_admin')) {
       fetchPlatformStats();
       fetchPendingHospitals();
     }
-  }, [user, profile]);
+  }, [user, profile, hasRole]);
 
   const fetchPlatformStats = async () => {
     try {
@@ -115,10 +122,10 @@ export default function AdminPortal({ navigate }: AdminPortalProps) {
 
   const handleApproveHospital = async (hospitalId: string) => {
     try {
-      const { error } = await supabase
-        .from('hospitals')
-        .update({ status: 'approved' })
-        .eq('id', hospitalId);
+      // Use Edge Function for secure hospital approval
+      const { data, error } = await supabase.functions.invoke('approve-hospital', {
+        body: { hospital_id: hospitalId }
+      });
 
       if (error) {
         console.error('Error approving hospital:', error);
@@ -155,13 +162,14 @@ export default function AdminPortal({ navigate }: AdminPortalProps) {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
+      await supabase.auth.signOut();
       navigate('landing');
     } catch (error) {
       console.error('Error signing out:', error);
     }
   };
 
+  // Show loading state
   if (loading || loadingStats) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -173,8 +181,8 @@ export default function AdminPortal({ navigate }: AdminPortalProps) {
     );
   }
 
-  if (!user || !profile || profile.role !== 'platform_admin') {
-    navigate('admin-login');
+  // Security check - don't render if not platform admin
+  if (!user || !profile || !hasRole('platform_admin')) {
     return null;
   }
 

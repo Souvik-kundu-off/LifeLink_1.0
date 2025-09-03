@@ -1,118 +1,92 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, X, Heart, MapPin, Clock, AlertTriangle } from 'lucide-react';
+import { Bell, X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { Button } from './ui/button';
-import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
-import { ScrollArea } from './ui/scroll-area';
-import { useAuth } from './AuthProvider';
-import { formatDistanceToNow } from '../utils/dateUtils';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { useUser } from '../hooks/useUser';
+import { supabase } from '../utils/supabase/client';
 
 interface Notification {
   id: string;
-  donor_id: string;
-  request_id: string;
+  title: string;
   message: string;
-  urgency: 'Critical' | 'High' | 'Medium' | 'Low';
-  created_at: string;
+  type: 'success' | 'error' | 'info' | 'warning';
   read: boolean;
+  created_at: string;
 }
 
-interface NotificationSystemProps {
-  onNotificationClick?: (notification: Notification) => void;
-}
-
-export default function NotificationSystem({ onNotificationClick }: NotificationSystemProps) {
-  const { user, session } = useAuth();
+export default function NotificationSystem() {
+  const { user } = useUser();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     if (user) {
       fetchNotifications();
-      // Set up periodic polling for new notifications
-      const interval = setInterval(fetchNotifications, 30000); // Poll every 30 seconds
-      return () => clearInterval(interval);
     }
   }, [user]);
 
   const fetchNotifications = async () => {
-    if (!user || !session?.access_token) return;
+    if (!user) return;
 
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-1ed20dc8/notifications/${user.id}`,
+      // For now, we'll use mock notifications since we don't have a notifications table
+      // In a real implementation, you would fetch from a notifications table
+      const mockNotifications: Notification[] = [
         {
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
+          id: '1',
+          title: 'Welcome to Lifelink!',
+          message: 'Thank you for joining our community of lifesavers.',
+          type: 'success',
+          read: false,
+          created_at: new Date().toISOString()
         }
-      );
+      ];
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setNotifications(data.notifications);
-          setUnreadCount(data.notifications.filter((n: Notification) => !n.read).length);
-        }
-      }
+      setNotifications(mockNotifications);
+      setUnreadCount(mockNotifications.filter(n => !n.read).length);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     }
   };
 
   const markAsRead = async (notificationId: string) => {
-    if (!session?.access_token) return;
-
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-1ed20dc8/notifications/${notificationId}/read`,
-        {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (response.ok) {
-        setNotifications(prev => 
-          prev.map(n => 
-            n.id === notificationId ? { ...n, read: true } : n
-          )
-        );
-        setUnreadCount(prev => Math.max(0, prev - 1));
-      }
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
-    }
+    setNotifications(prev => 
+      prev.map(n => 
+        n.id === notificationId ? { ...n, read: true } : n
+      )
+    );
+    setUnreadCount(prev => Math.max(0, prev - 1));
   };
 
-  const handleNotificationClick = (notification: Notification) => {
-    if (!notification.read) {
-      markAsRead(notification.id);
-    }
-    if (onNotificationClick) {
-      onNotificationClick(notification);
-    }
+  const markAllAsRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setUnreadCount(0);
   };
 
-  const getUrgencyColor = (urgency: string) => {
-    switch (urgency) {
-      case 'Critical':
-        return 'bg-red-100 text-red-800';
-      case 'High':
-        return 'bg-orange-100 text-orange-800';
-      case 'Medium':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Low':
-        return 'bg-green-100 text-green-800';
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'error':
+        return <AlertCircle className="h-4 w-4 text-red-600" />;
+      case 'warning':
+        return <AlertCircle className="h-4 w-4 text-yellow-600" />;
       default:
-        return 'bg-gray-100 text-gray-800';
+        return <Info className="h-4 w-4 text-blue-600" />;
+    }
+  };
+
+  const getNotificationColor = (type: string) => {
+    switch (type) {
+      case 'success':
+        return 'border-green-200 bg-green-50';
+      case 'error':
+        return 'border-red-200 bg-red-50';
+      case 'warning':
+        return 'border-yellow-200 bg-yellow-50';
+      default:
+        return 'border-blue-200 bg-blue-50';
     }
   };
 
@@ -123,87 +97,98 @@ export default function NotificationSystem({ onNotificationClick }: Notification
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setShowDropdown(!showDropdown)}
         className="relative"
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <Badge className="absolute -top-1 -right-1 h-5 w-5 text-xs bg-red-500 text-white">
-            {unreadCount > 9 ? '9+' : unreadCount}
+          <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs">
+            {unreadCount}
           </Badge>
         )}
       </Button>
 
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-80 z-50">
-          <Card className="shadow-lg border">
-            <CardContent className="p-0">
-              <div className="flex items-center justify-between p-4 border-b">
-                <h3 className="font-medium text-gray-900">Notifications</h3>
+      {showDropdown && (
+        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
+              {unreadCount > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsOpen(false)}
+                  onClick={markAllAsRead}
+                  className="text-sm text-blue-600 hover:text-blue-800"
                 >
-                  <X className="h-4 w-4" />
+                  Mark all as read
                 </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="max-h-96 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <div className="p-4 text-center text-gray-500">
+                No notifications
               </div>
-              
-              <ScrollArea className="max-h-80">
-                {notifications.length === 0 ? (
-                  <div className="p-8 text-center text-gray-500">
-                    <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No notifications yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {notifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        className={`p-4 border-b last:border-b-0 cursor-pointer hover:bg-gray-50 transition-colors ${
-                          !notification.read ? 'bg-blue-50' : ''
-                        }`}
-                        onClick={() => handleNotificationClick(notification)}
+            ) : (
+              notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`p-4 border-b border-gray-100 hover:bg-gray-50 ${
+                    !notification.read ? 'bg-blue-50' : ''
+                  }`}
+                >
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0 mt-0.5">
+                      {getNotificationIcon(notification.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">
+                        {notification.title}
+                      </p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {notification.message}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-2">
+                        {new Date(notification.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {!notification.read && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => markAsRead(notification.id)}
+                        className="text-xs text-blue-600 hover:text-blue-800"
                       >
-                        <div className="flex items-start space-x-3">
-                          <div className={`p-2 rounded-full ${
-                            notification.urgency === 'Critical' ? 'bg-red-100' :
-                            notification.urgency === 'High' ? 'bg-orange-100' :
-                            notification.urgency === 'Medium' ? 'bg-yellow-100' :
-                            'bg-green-100'
-                          }`}>
-                            {notification.urgency === 'Critical' ? (
-                              <AlertTriangle className="h-4 w-4 text-red-600" />
-                            ) : (
-                              <Heart className="h-4 w-4 text-red-600" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm ${!notification.read ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
-                              {notification.message}
-                            </p>
-                            <div className="flex items-center space-x-2 mt-1">
-                              <Badge className={getUrgencyColor(notification.urgency)} variant="secondary">
-                                {notification.urgency}
-                              </Badge>
-                              <span className="text-xs text-gray-500 flex items-center">
-                                <Clock className="h-3 w-3 mr-1" />
-                                {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
-                              </span>
-                            </div>
-                          </div>
-                          {!notification.read && (
-                            <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0 mt-2"></div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                        Mark as read
+                      </Button>
+                    )}
                   </div>
-                )}
-              </ScrollArea>
-            </CardContent>
-          </Card>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="p-4 border-t border-gray-200">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDropdown(false)}
+              className="w-full text-gray-600 hover:text-gray-800"
+            >
+              Close
+            </Button>
+          </div>
         </div>
+      )}
+
+      {/* Backdrop to close dropdown when clicking outside */}
+      {showDropdown && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowDropdown(false)}
+        />
       )}
     </div>
   );
